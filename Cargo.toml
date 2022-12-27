@@ -7,4 +7,3 @@ edition = "2021"
 
 [dependencies]
 egui-macroquad = "0.12.0"
-generational-arena = "0.2.8"

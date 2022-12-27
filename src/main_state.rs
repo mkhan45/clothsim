@@ -1,25 +1,21 @@
-use std::cell::{Cell, RefCell};
-
 use crate::error::SimError;
 use egui_macroquad::macroquad::prelude::*;
 
-const DT: f32 = 0.1;
-const G: f32 = 0.0;
-const NODE_RADIUS: f32 = 10.0;
-const TARGET_DIST: f32 = 80.0;
-const ELASTICITY: f32 = 1.0;
+const DT: f32 = 0.05;
+const G: f32 = 18.0;
+const NODE_RADIUS: f32 = 5.5;
+const ROPE_WIDTH: f32 = 5.0;
+const TARGET_DIST: f32 = 12.5;
+const RIGIDITY: f32 = 1.0;
 
-use generational_arena::{self, Arena};
-
-#[derive(Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Node {
-    pos: Vec2,
     last_pos: Vec2,
+    pos: Vec2,
     vel: Vec2,
     force: Vec2,
     mass: f32,
     fixed: bool,
-    adjs: Vec<generational_arena::Index>,
 }
 
 impl Default for Node {
@@ -30,7 +26,6 @@ impl Default for Node {
             vel: Default::default(),
             force: Default::default(),
             mass: 1.0,
-            adjs: Default::default(),
             fixed: Default::default(),
         }
     }
@@ -55,10 +50,12 @@ impl Node {
         Node::with_pos_and_mass(Vec2::new(x, y), m)
     }
 
+    #[allow(dead_code)]
     pub fn with_xy(x: f32, y: f32) -> Node {
         Node::with_pos(Vec2::new(x, y))
     }
 
+    #[allow(dead_code)]
     pub fn fixed(mut self) -> Node {
         self.fixed = true;
         self
@@ -69,13 +66,19 @@ impl Node {
             return;
         }
 
-        let last_vel = (self.pos - self.last_pos) / DT;
-        let last_accel = (last_vel - self.vel) / DT;
-        let new_accel = self.force / self.mass;
+        let acc = self.force / self.mass;
 
         self.last_pos = self.pos;
-        self.vel = self.vel + (last_accel + new_accel) * 0.5 * DT;
+        self.vel = self.vel + acc * DT;
         self.pos = self.pos + self.vel * DT;
+    }
+
+    pub fn differentiate(&mut self) {
+        if self.fixed {
+            return;
+        }
+
+        self.vel = (self.pos - self.last_pos) / DT;
         self.force = Vec2::ZERO;
     }
 
@@ -84,60 +87,94 @@ impl Node {
             return;
         }
 
-        self.force += Vec2::new(0.0, G);
+        self.force += Vec2::new(0.0, G * self.mass);
     }
 
-    pub fn simulate(&mut self, arena: &Arena<Node>) {
-        for &i in self.adjs.iter() {
-            let adj = arena.get(i).unwrap();
-
-            let r = self.pos - adj.pos;
-            let dist = r.length();
-            let mult = 1.0 + (TARGET_DIST - dist);
-
-            self.force += r * mult * ELASTICITY;
+    pub fn add_offs(&mut self, offs: Vec2) {
+        if !self.fixed {
+            self.pos += offs;
         }
     }
 }
 
+pub struct Constraint {
+    a: usize,
+    b: usize,
+}
+
+impl Constraint {
+    pub fn solve(&self, arena: &mut Vec<Node>) {
+        let (a_offs, b_offs) = {
+            let a = &arena[self.a];
+            let b = &arena[self.b];
+
+            let r = b.pos - a.pos;
+            let dist = r.length();
+
+            let norm = r.normalize_or_zero();
+            let diff = dist - TARGET_DIST;
+            let offs = norm * diff * RIGIDITY / (a.mass + b.mass);
+
+            (offs / a.mass, -offs / b.mass)
+        };
+
+        arena[self.a].add_offs(a_offs);
+        arena[self.b].add_offs(b_offs);
+    }
+}
+
 pub struct MainState {
-    arena: generational_arena::Arena<Node>,
+    arena: Vec<Node>,
+    constraints: Vec<Constraint>,
 }
 
 impl Default for MainState {
     fn default() -> Self {
-        let mut arena = Arena::new();
+        let mut arena = Vec::new();
         let mid = Vec2::new(screen_width() / 2.0, screen_height() / 2.0);
 
-        let a = arena.insert(Node::with_pos(mid + Vec2::new(20.0, 30.0)));
-        let b = arena.insert(Node::with_pos(mid + Vec2::new(-20.0, -30.0)));
+        for i in 0..20 {
+            arena.push(Node::with_pos(mid + Vec2::new(0.0, 10.0 * i as f32)));
+        }
+        arena[0].fixed = true;
 
-        arena.get_mut(a).unwrap().adjs.push(b);
-        arena.get_mut(b).unwrap().adjs.push(a);
+        let mut constraints = Vec::new();
+        for i in 0..19 {
+            constraints.push(Constraint { a: i, b: i + 1 });
+        }
 
-
-        Self { arena }
+        Self { arena, constraints }
     }
 }
 
 impl MainState {
-    pub fn simulate(&mut self) {
-        todo!();
-    }
-
     pub fn update(&mut self) -> Result<(), SimError> {
-        for (_, node) in self.arena.iter_mut() {
-            node.apply_gravity();
-            todo!(); // simulate
-            node.integrate();
+        self.arena.iter_mut().for_each(Node::apply_gravity);
+        self.arena.iter_mut().for_each(Node::integrate);
+
+        for constraint in self.constraints.iter() {
+            constraint.solve(&mut self.arena);
+        }
+
+        self.arena.iter_mut().for_each(Node::differentiate);
+
+        if is_key_down(KeyCode::LeftShift) {
+            self.arena[0].pos = mouse_position().into();
         }
 
         Ok(())
     }
 
     pub fn draw(&mut self) -> Result<(), SimError> {
-        for (_, node) in self.arena.iter_mut() {
-            draw_circle(node.pos.x, node.pos.y, NODE_RADIUS, WHITE);
+        for constraint in self.constraints.iter() {
+            let a = self.arena[constraint.a];
+            let b = self.arena[constraint.b];
+            draw_line(a.pos.x, a.pos.y, b.pos.x, b.pos.y, ROPE_WIDTH, WHITE);
+        }
+
+        for node in self.arena.iter() {
+            let c = if node.fixed { RED } else { WHITE };
+            draw_circle(node.pos.x, node.pos.y, NODE_RADIUS, c);
         }
 
         Ok(())

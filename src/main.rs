@@ -13,7 +13,9 @@ async fn main() -> Result<(), error::SimError> {
 
     loop {
         main_state.draw()?;
-        main_state.update()?;
+        for _ in 0..1 {
+            main_state.update()?;
+        }
         next_frame().await;
     }
 }
