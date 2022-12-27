@@ -155,7 +155,7 @@ impl Default for MainState {
                     1.0 + (i as f32 / 20.0).powi(2) * 0.0,
                 ));
 
-                if i == 0 && (j % 5 == 0 || j == 29) {
+                if i == 0 && (j % 15 == 0 || j == 29) {
                     arena[j].fixed = true;
                 }
 
@@ -218,21 +218,9 @@ impl MainState {
             self.arena[0].pos = mouse_position().into();
         }
         if is_key_down(KeyCode::Key2) {
-            self.arena[5].pos = mouse_position().into();
-        }
-        if is_key_down(KeyCode::Key3) {
-            self.arena[10].pos = mouse_position().into();
-        }
-        if is_key_down(KeyCode::Key4) {
             self.arena[15].pos = mouse_position().into();
         }
-        if is_key_down(KeyCode::Key5) {
-            self.arena[20].pos = mouse_position().into();
-        }
-        if is_key_down(KeyCode::Key6) {
-            self.arena[25].pos = mouse_position().into();
-        }
-        if is_key_down(KeyCode::Key7) {
+        if is_key_down(KeyCode::Key3) {
             self.arena[29].pos = mouse_position().into();
         }
         self.last_mouse_pos = current_mouse_pos;
