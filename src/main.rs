@@ -5,7 +5,7 @@ use main_state::MainState;
 mod error;
 mod main_state;
 
-#[macroquad::main("Gravity")]
+#[macroquad::main("Cloth")]
 async fn main() -> Result<(), error::SimError> {
     next_frame().await;
 
@@ -13,9 +13,7 @@ async fn main() -> Result<(), error::SimError> {
 
     loop {
         main_state.draw()?;
-        for _ in 0..1 {
-            main_state.update()?;
-        }
+        main_state.update()?;
         next_frame().await;
     }
 }

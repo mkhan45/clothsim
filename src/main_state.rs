@@ -1,12 +1,13 @@
 use crate::error::SimError;
 use egui_macroquad::macroquad::prelude::*;
 
-const DT: f32 = 0.05;
+const DT: f32 = 0.15;
 const G: f32 = 18.0;
-const NODE_RADIUS: f32 = 5.5;
-const ROPE_WIDTH: f32 = 5.0;
-const TARGET_DIST: f32 = 12.5;
+const NODE_RADIUS: f32 = 2.0;
+const ROPE_WIDTH: f32 = 4.0;
+const TARGET_DIST: f32 = 30.0;
 const RIGIDITY: f32 = 1.0;
+const DRAG: f32 = 0.7;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Node {
@@ -90,6 +91,14 @@ impl Node {
         self.force += Vec2::new(0.0, G * self.mass);
     }
 
+    pub fn apply_drag(&mut self) {
+        if self.fixed {
+            return;
+        }
+
+        self.force += -self.vel * DRAG;
+    }
+
     pub fn add_offs(&mut self, offs: Vec2) {
         if !self.fixed {
             self.pos += offs;
@@ -113,7 +122,11 @@ impl Constraint {
 
             let norm = r.normalize_or_zero();
             let diff = dist - TARGET_DIST;
-            let offs = norm * diff * RIGIDITY / (a.mass + b.mass);
+            let mut offs = norm * diff * RIGIDITY / (a.mass + b.mass);
+
+            if dist < TARGET_DIST {
+                offs *= 0.5;
+            }
 
             (offs / a.mass, -offs / b.mass)
         };
@@ -126,41 +139,103 @@ impl Constraint {
 pub struct MainState {
     arena: Vec<Node>,
     constraints: Vec<Constraint>,
+    last_mouse_pos: Vec2,
 }
 
 impl Default for MainState {
     fn default() -> Self {
         let mut arena = Vec::new();
+        let mut constraints = Vec::new();
         let mid = Vec2::new(screen_width() / 2.0, screen_height() / 2.0);
 
-        for i in 0..20 {
-            arena.push(Node::with_pos(mid + Vec2::new(0.0, 10.0 * i as f32)));
-        }
-        arena[0].fixed = true;
+        for i in 0..30 {
+            for j in 0..30 {
+                arena.push(Node::with_pos_and_mass(
+                    mid + Vec2::new(30.0 * j as f32, 30.0 * i as f32) - Vec2::new(150.0, 150.0),
+                    1.0 + (i as f32 / 20.0).powi(2) * 0.0,
+                ));
 
-        let mut constraints = Vec::new();
-        for i in 0..19 {
-            constraints.push(Constraint { a: i, b: i + 1 });
+                if i == 0 && (j % 5 == 0 || j == 29) {
+                    arena[j].fixed = true;
+                }
+
+                if j != 29 {
+                    constraints.push(Constraint {
+                        a: (i * 30) + j,
+                        b: (i * 30) + j + 1,
+                    });
+                }
+
+                if i != 29 {
+                    constraints.push(Constraint {
+                        a: (i * 30) + j,
+                        b: ((i + 1) * 30) + j,
+                    });
+                }
+            }
         }
 
-        Self { arena, constraints }
+        // for i in 0..30 {
+        //     arena.push(Node::with_pos_and_mass(
+        //         mid + Vec2::new(0.0, 10.0 * i as f32),
+        //         1.0 + (i as f32 / 20.0).powi(2) * 30.0,
+        //     ));
+        // }
+        // arena[0].fixed = true;
+
+        // for i in 0..29 {
+        //     constraints.push(Constraint { a: i, b: i + 1 });
+        // }
+
+        Self { arena, constraints, last_mouse_pos: mouse_position().into() }
     }
 }
 
 impl MainState {
     pub fn update(&mut self) -> Result<(), SimError> {
         self.arena.iter_mut().for_each(Node::apply_gravity);
+        self.arena.iter_mut().for_each(Node::apply_drag);
+
+        let current_mouse_pos: Vec2 = mouse_position().into();
+        for node in self.arena.iter_mut() {
+            if (node.pos - current_mouse_pos).length() < 30.0 {
+                let f = current_mouse_pos - self.last_mouse_pos;
+                node.force += f * 50.0;
+            }
+        }
+
         self.arena.iter_mut().for_each(Node::integrate);
 
-        for constraint in self.constraints.iter() {
-            constraint.solve(&mut self.arena);
+        for _ in 0..30 {
+            for constraint in self.constraints.iter() {
+                constraint.solve(&mut self.arena);
+            }
         }
 
         self.arena.iter_mut().for_each(Node::differentiate);
 
-        if is_key_down(KeyCode::LeftShift) {
+        if is_key_down(KeyCode::Key1) {
             self.arena[0].pos = mouse_position().into();
         }
+        if is_key_down(KeyCode::Key2) {
+            self.arena[5].pos = mouse_position().into();
+        }
+        if is_key_down(KeyCode::Key3) {
+            self.arena[10].pos = mouse_position().into();
+        }
+        if is_key_down(KeyCode::Key4) {
+            self.arena[15].pos = mouse_position().into();
+        }
+        if is_key_down(KeyCode::Key5) {
+            self.arena[20].pos = mouse_position().into();
+        }
+        if is_key_down(KeyCode::Key6) {
+            self.arena[25].pos = mouse_position().into();
+        }
+        if is_key_down(KeyCode::Key7) {
+            self.arena[29].pos = mouse_position().into();
+        }
+        self.last_mouse_pos = current_mouse_pos;
 
         Ok(())
     }
