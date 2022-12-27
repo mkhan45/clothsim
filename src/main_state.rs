@@ -5,11 +5,12 @@ const DT: f32 = 0.15;
 const G: f32 = 18.0;
 const NODE_RADIUS: f32 = 2.0;
 const ROPE_WIDTH: f32 = 4.0;
-const TARGET_DIST: f32 = 15.0;
+const TARGET_DIST: f32 = 8.0;
 const RIGIDITY: f32 = 1.0;
-const DRAG: f32 = 0.7;
+const DRAG: f32 = 0.5;
 
-const GRID_SIZE: usize = 50;
+const GRID_ROWS: usize = 50;
+const GRID_COLS: usize = 100;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Node {
@@ -124,48 +125,8 @@ pub struct MainState {
     last_mouse_pos: Vec2,
 }
 
-impl Default for MainState {
-    fn default() -> Self {
-        let mut arena = Vec::new();
-        let mut constraints = Vec::new();
-        let mid = Vec2::new(screen_width() / 2.0, screen_height() / 2.0);
-
-        for i in 0..GRID_SIZE {
-            for j in 0..GRID_SIZE {
-                arena.push(Node::with_pos_and_mass(
-                    mid + Vec2::new(TARGET_DIST * j as f32, TARGET_DIST * i as f32) - Vec2::new(250.0, 250.0),
-                    1.0 + (i as f32 / 20.0).powi(2) * 0.0,
-                ));
-
-                if i == 0 && (j == 0 || j == GRID_SIZE / 2 || j == GRID_SIZE - 1) {
-                    arena[j].fixed = true;
-                }
-
-                if (i % 3 == 0 || i == GRID_SIZE - 1) && j != GRID_SIZE - 1 {
-                    constraints.push(Constraint {
-                        a: (i * GRID_SIZE) + j,
-                        b: (i * GRID_SIZE) + j + 1,
-                    });
-                }
-
-                if (j % 3 == 0 || j == GRID_SIZE - 1) && i != GRID_SIZE - 1 {
-                    constraints.push(Constraint {
-                        a: (i * GRID_SIZE) + j,
-                        b: ((i + 1) * GRID_SIZE) + j,
-                    });
-                }
-            }
-        }
-
-        Self { arena, constraints, last_mouse_pos: mouse_position().into() }
-    }
-}
-
 impl MainState {
-    pub fn update(&mut self) -> Result<(), SimError> {
-        self.arena.iter_mut().for_each(Node::apply_gravity);
-        self.arena.iter_mut().for_each(Node::apply_drag);
-
+    pub fn apply_wind(&mut self) {
         let current_mouse_pos: Vec2 = mouse_position().into();
         for node in self.arena.iter_mut() {
             if (node.pos - current_mouse_pos).length() < 30.0 {
@@ -173,27 +134,24 @@ impl MainState {
                 node.force += f * 50.0;
             }
         }
+    }
 
-        self.arena.iter_mut().for_each(Node::integrate);
-
+    pub fn solve_constraints(&mut self) {
         for _ in 0..5 {
             for constraint in self.constraints.iter() {
                 constraint.solve(&mut self.arena);
             }
         }
+    }
 
+    pub fn update(&mut self) -> Result<(), SimError> {
+        self.arena.iter_mut().for_each(Node::apply_gravity);
+        self.arena.iter_mut().for_each(Node::apply_drag);
+        self.apply_wind();
+        self.arena.iter_mut().for_each(Node::integrate);
+        self.solve_constraints();
         self.arena.iter_mut().for_each(Node::differentiate);
-
-        if is_key_down(KeyCode::Key1) {
-            self.arena[0].pos = mouse_position().into();
-        }
-        if is_key_down(KeyCode::Key2) {
-            self.arena[GRID_SIZE / 2].pos = mouse_position().into();
-        }
-        if is_key_down(KeyCode::Key3) {
-            self.arena[GRID_SIZE - 1].pos = mouse_position().into();
-        }
-        self.last_mouse_pos = current_mouse_pos;
+        self.last_mouse_pos = mouse_position().into();
 
         Ok(())
     }
@@ -211,5 +169,56 @@ impl MainState {
         }
 
         Ok(())
+    }
+}
+
+impl Default for MainState {
+    fn default() -> Self {
+        let mut arena = Vec::new();
+        let mut constraints = Vec::new();
+
+        let screen_mid = screen_width() / 2.0;
+        let cloth_width = (GRID_COLS as f32 * TARGET_DIST) / 2.0;
+        let x_offs = screen_mid - cloth_width;
+
+        for i in 0..GRID_ROWS {
+            for j in 0..GRID_COLS {
+                arena.push(Node::with_pos_and_mass(
+                        Vec2::new(TARGET_DIST * j as f32 + x_offs, TARGET_DIST * i as f32),
+                        1.0 + (i as f32 / 20.0).powi(2) * 0.0,
+                ));
+
+                if i == 0 && (j % 3 == 0) {
+                    arena[j].fixed = true;
+                }
+
+                if (i % 3 == 0 || i == GRID_ROWS - 1) && j != GRID_COLS - 1 {
+                    constraints.push(Constraint {
+                        a: (i * GRID_COLS) + j,
+                        b: (i * GRID_COLS) + j + 1,
+                    });
+                } 
+                if (j % 3 == 0 || j == GRID_COLS - 1) && i != GRID_ROWS - 1 {
+                    constraints.push(Constraint {
+                        a: (i * GRID_COLS) + j,
+                        b: ((i + 1) * GRID_COLS) + j,
+                    });
+                } 
+            }
+        }
+
+        // super lazy way to remove floaters 
+        let constrained_nodes: std::collections::HashSet<_> = constraints.iter().flat_map(|constraint| {
+            [constraint.a, constraint.b]
+        }).collect();
+
+        for i in 0..arena.len() {
+            if !constrained_nodes.contains(&i) {
+                arena[i].fixed = true;
+                arena[i].pos = Vec2::new(-100.0, -100.0);
+            }
+        }
+
+        Self { arena, constraints, last_mouse_pos: mouse_position().into() }
     }
 }
