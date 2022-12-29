@@ -92,6 +92,7 @@ impl Node {
 pub struct Constraint {
     a: usize,
     b: usize,
+    break_threshold: f32,
 }
 
 impl Constraint {
@@ -150,6 +151,9 @@ impl MainState {
         self.apply_wind();
         self.arena.iter_mut().for_each(Node::integrate);
         self.solve_constraints();
+        self.constraints.retain(|constraint| {
+            (self.arena[constraint.a].pos - self.arena[constraint.b].pos).length() < constraint.break_threshold
+        });
         self.arena.iter_mut().for_each(Node::differentiate);
         self.last_mouse_pos = mouse_position().into();
 
@@ -184,33 +188,42 @@ impl Default for MainState {
         for i in 0..GRID_ROWS {
             for j in 0..GRID_COLS {
                 arena.push(Node::with_pos_and_mass(
-                        Vec2::new(TARGET_DIST * j as f32 + x_offs, TARGET_DIST * i as f32),
-                        1.0 + (i as f32 / 20.0).powi(2) * 0.0,
+                    Vec2::new(TARGET_DIST * j as f32 + x_offs, TARGET_DIST * i as f32),
+                    1.0 + (i as f32 / 20.0).powi(2) * 0.0,
                 ));
 
                 if i == 0 && (j % 3 == 0) {
                     arena[j].fixed = true;
                 }
 
+                let break_threshold = if i == 0 {
+                    TARGET_DIST * 10.0
+                } else {
+                    TARGET_DIST * 5.0
+                };
+
                 if (i % 3 == 0 || i == GRID_ROWS - 1) && j != GRID_COLS - 1 {
                     constraints.push(Constraint {
                         a: (i * GRID_COLS) + j,
                         b: (i * GRID_COLS) + j + 1,
+                        break_threshold,
                     });
-                } 
+                }
                 if (j % 3 == 0 || j == GRID_COLS - 1) && i != GRID_ROWS - 1 {
                     constraints.push(Constraint {
                         a: (i * GRID_COLS) + j,
                         b: ((i + 1) * GRID_COLS) + j,
+                        break_threshold,
                     });
-                } 
+                }
             }
         }
 
-        // super lazy way to remove floaters 
-        let constrained_nodes: std::collections::HashSet<_> = constraints.iter().flat_map(|constraint| {
-            [constraint.a, constraint.b]
-        }).collect();
+        // super lazy way to remove floaters
+        let constrained_nodes: std::collections::HashSet<_> = constraints
+            .iter()
+            .flat_map(|constraint| [constraint.a, constraint.b])
+            .collect();
 
         for i in 0..arena.len() {
             if !constrained_nodes.contains(&i) {
@@ -219,6 +232,10 @@ impl Default for MainState {
             }
         }
 
-        Self { arena, constraints, last_mouse_pos: mouse_position().into() }
+        Self {
+            arena,
+            constraints,
+            last_mouse_pos: mouse_position().into(),
+        }
     }
 }
