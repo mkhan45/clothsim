@@ -162,12 +162,18 @@ impl MainState {
         if is_mouse_button_down(MouseButton::Right) {
             let mouse_pos: Vec2 = mouse_position().into();
             self.constraints.retain(|constraint| {
-                // https://stackoverflow.com/questions/17692922/check-is-a-point-x-y-is-between-two-points-drawn-on-a-straight-line
+                // https://stackoverflow.com/questions/3838329/how-can-i-check-if-two-segments-intersect
                 let a = self.arena[constraint.a].pos;
                 let b = self.arena[constraint.b].pos;
                 let c = mouse_pos;
+                let d = self.last_mouse_pos;
 
-                !((a - c).length() + (b - c).length() - (a - b).length() < 0.2)
+                fn ccw(a: Vec2, b: Vec2, c: Vec2) -> bool {
+                    (c.y-a.y) * (b.x-a.x) > (b.y-a.y) * (c.x-a.x)
+                }
+
+                let intersects = (ccw(a, c, d) != ccw(b, c, d)) && (ccw(a, b, c) != ccw(a, b, d));
+                !intersects
             });
         }
         self.arena.iter_mut().for_each(Node::differentiate);
