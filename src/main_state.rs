@@ -177,10 +177,14 @@ impl Default for MainState {
         let mut arena = Vec::new();
         let mut constraints = Vec::new();
 
+        let screen_mid = screen_width() / 2.0;
+        let cloth_width = (GRID_COLS as f32 * TARGET_DIST) / 2.0;
+        let x_offs = screen_mid - cloth_width;
+
         for i in 0..GRID_ROWS {
             for j in 0..GRID_COLS {
                 arena.push(Node::with_pos_and_mass(
-                        Vec2::new(TARGET_DIST * j as f32 + 20.0, TARGET_DIST * i as f32),
+                        Vec2::new(TARGET_DIST * j as f32 + x_offs, TARGET_DIST * i as f32),
                         1.0 + (i as f32 / 20.0).powi(2) * 0.0,
                 ));
 
