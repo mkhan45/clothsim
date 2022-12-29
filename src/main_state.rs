@@ -154,6 +154,17 @@ impl MainState {
         self.constraints.retain(|constraint| {
             (self.arena[constraint.a].pos - self.arena[constraint.b].pos).length() < constraint.break_threshold
         });
+        if is_mouse_button_down(MouseButton::Right) {
+            let mouse_pos: Vec2 = mouse_position().into();
+            self.constraints.retain(|constraint| {
+                // https://stackoverflow.com/questions/17692922/check-is-a-point-x-y-is-between-two-points-drawn-on-a-straight-line
+                let a = self.arena[constraint.a].pos;
+                let b = self.arena[constraint.b].pos;
+                let c = mouse_pos;
+
+                !((a - c).length() + (b - c).length() - (a - b).length() < 0.2)
+            });
+        }
         self.arena.iter_mut().for_each(Node::differentiate);
         self.last_mouse_pos = mouse_position().into();
 
