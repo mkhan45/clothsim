@@ -128,6 +128,11 @@ pub struct MainState {
 
 impl MainState {
     pub fn apply_wind(&mut self) {
+        // disable wind when knife is on
+        if is_mouse_button_down(MouseButton::Right) {
+            return
+        }
+
         let current_mouse_pos: Vec2 = mouse_position().into();
         for node in self.arena.iter_mut() {
             if (node.pos - current_mouse_pos).length() < 30.0 {
