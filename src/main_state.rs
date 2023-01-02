@@ -194,6 +194,8 @@ impl MainState {
             draw_circle(node.pos.x, node.pos.y, NODE_RADIUS, c);
         }
 
+        draw_text("Right Click to Cut", 10.0, screen_height() - 50.0, 36.0, WHITE);
+
         Ok(())
     }
 }
